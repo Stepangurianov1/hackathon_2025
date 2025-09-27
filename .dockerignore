@@ -1,0 +1,15 @@
+# Ignore local env and caches
+.venv/
+__pycache__/
+*.pyc
+
+# Large data not needed in image
+Датасет/
+outputs/slices/
+
+# VCS
+.git/
+.gitignore
+
+# OS
+.DS_Store

@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DICOM Stack Viewer</title>
+  <style>
+    :root{ --bg:#0b0f1a; --card:#111626; --muted:#9aa3b2; --text:#e6eaf2; --primary:#6d8bff; --border:#1e2538 }
+    *{box-sizing:border-box}
+    body{ margin:0; min-height:100vh; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    .wrap{ display:grid; grid-template-rows:auto auto 1fr auto; height:100vh; gap:8px; padding:12px }
+    .row{ display:flex; gap:10px; align-items:center }
+    .btn{ padding:8px 12px; border-radius:10px; border:1px solid var(--border); background: var(--primary); color:white; font-weight:600; cursor:pointer }
+    .btn-ghost{ background: transparent; color: var(--text) }
+    .card{ background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02)); border:1px solid var(--border); border-radius:12px; padding:10px }
+    .muted{ color: var(--muted) }
+    #canvas{ width:100%; height:100%; background:#000; display:block; border:1px solid var(--border); border-radius:12px }
+    .controls{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+    input[type=range]{ width: 220px }
+  </style>
+  <script>
+    let slices=[], idx=0, playing=false, timer=null, wl=-600, ww=1500;
+    function $(id){ return document.getElementById(id); }
+    function draw(){
+      if(!slices.length) return;
+      const img = new Image();
+      img.onload = ()=>{
+        const c=$('canvas'), ctx=c.getContext('2d');
+        // fit contain
+        const W=c.clientWidth, H=c.clientHeight;
+        c.width=W; c.height=H;
+        const scale=Math.min(W/img.width, H/img.height);
+        const w=img.width*scale, h=img.height*scale;
+        ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+        ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(img, (W-w)/2, (H-h)/2, w, h);
+        $('status').textContent = `Slice ${idx+1}/${slices.length}`;
+      };
+      img.src = 'data:image/png;base64,' + slices[idx];
+    }
+    function play(){ if(playing) return; playing=true; timer=setInterval(()=>{ idx=(idx+1)%slices.length; draw(); }, 80); }
+    function pause(){ playing=false; if(timer){ clearInterval(timer); timer=null; } }
+    async function uploadZip(file){
+      $('info').textContent = 'Uploading...';
+      const fd=new FormData(); fd.append('file', file);
+      // pass wl/ww to backend
+      const resp = await fetch(`/series_pngs?wl=${wl}&ww=${ww}`, { method:'POST', body: fd });
+      const j = await resp.json();
+      if(!resp.ok){ $('info').textContent = j.error || 'Failed'; return; }
+      slices = j.slices || []; idx=0; draw();
+      $('info').textContent = `Loaded ${j.count} slices (${j.width}×${j.height})`;
+    }
+    function init(){
+      $('file').addEventListener('change', ()=>{ if($('file').files.length){ uploadZip($('file').files[0]); }});
+      $('slider').addEventListener('input', ()=>{ if(!slices.length) return; idx=Math.min(slices.length-1, Math.max(0, Math.floor((slices.length-1)*($('slider').value/100)))); draw(); });
+      $('btnPlay').addEventListener('click', ()=> play());
+      $('btnPause').addEventListener('click', ()=> pause());
+      $('wl').addEventListener('input', ()=>{ wl=parseFloat($('wl').value); $('wlv').textContent=wl; });
+      $('ww').addEventListener('input', ()=>{ ww=parseFloat($('ww').value); $('wwv').textContent=ww; });
+      window.addEventListener('resize', draw);
+    }
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <button class="btn-ghost" onclick="location.href='/'">Back</button>
+      <div class="muted">Upload ZIP with a DICOM study and scrub through slices.</div>
+      <input id="file" type="file" accept=".zip" />
+      <button class="btn" onclick="$('file').click()">Choose ZIP</button>
+      <div id="info" class="muted" style="margin-left:auto">Idle</div>
+    </div>
+    <div class="card controls">
+      <button id="btnPlay" class="btn">Play</button>
+      <button id="btnPause" class="btn-ghost">Pause</button>
+      <input id="slider" type="range" min="0" max="100" value="0" />
+      <span class="muted" id="status">Slice 0/0</span>
+      <span class="muted">WL</span>
+      <input id="wl" type="range" min="-1000" max="200" value="-600" step="10" /> <span id="wlv" class="muted">-600</span>
+      <span class="muted">WW</span>
+      <input id="ww" type="range" min="200" max="3000" value="1500" step="10" /> <span id="wwv" class="muted">1500</span>
+      <button class="btn-ghost" onclick="if($('file').files.length){ uploadZip($('file').files[0]); }">Apply WL/WW</button>
+    </div>
+    <div class="card" style="padding:0; min-height: 60vh;">
+      <canvas id="canvas"></canvas>
+    </div>
+    <div class="row">
+      <a class="btn-ghost" href="/visualize">Open 3D Viewer</a>
+    </div>
+  </div>
+</body>
+</html>
+
+

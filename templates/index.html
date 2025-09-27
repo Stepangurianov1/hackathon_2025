@@ -5,51 +5,239 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CT Inference</title>
   <style>
-    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif; margin: 2rem; }
-    .dropzone { border: 2px dashed #888; padding: 2rem; border-radius: 8px; text-align:center; color:#555; }
-    .dropzone.dragover { border-color: #4f46e5; color:#4f46e5; }
-    #result { margin-top: 1rem; white-space: pre-wrap; }
-    button { padding: .6rem 1rem; border-radius:6px; background:#4f46e5; color:#fff; border:none; cursor:pointer; }
-    button:disabled { opacity: .6; cursor: default; }
+    :root {
+      --bg: #0b0f1a;
+      --card: #111626;
+      --muted: #9aa3b2;
+      --text: #e6eaf2;
+      --primary: #6d8bff;
+      --primary-600: #5a76e6;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --border: #1e2538;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--text);
+      background: radial-gradient(1200px 800px at 10% 10%, #121a2e 0%, transparent 60%),
+                  radial-gradient(1000px 700px at 90% 20%, #10182b 0%, transparent 60%), var(--bg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      display: grid; place-items: center; padding: 32px;
+    }
+    .container { width: 100%; max-width: 780px; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+    }
+    .heading { margin: 0 0 6px; font-weight: 700; letter-spacing: .2px; text-align: center; }
+    .sub { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+
+    .dropzone {
+      border: 1.5px dashed var(--border); border-radius: 14px; padding: 28px; text-align: center;
+      color: var(--muted); transition: all .18s ease; background: rgba(255,255,255,0.015);
+    }
+    .dropzone.dragover { border-color: var(--primary); color: var(--primary); background: rgba(109,139,255,0.05); }
+    .dz-title { font-weight: 600; color: var(--text); margin-top: 6px; }
+    .dz-note  { font-size: 13px; color: var(--muted); }
+
+    .actions { display:flex; align-items:center; gap:12px; justify-content:center; margin-top: 18px; flex-wrap: wrap; }
+    .btn { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--primary);
+      color: white; font-weight: 600; letter-spacing: .2px; cursor: pointer; transition: background .2s ease; }
+    .btn:hover { background: var(--primary-600); }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .file { display:none; }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-ghost:hover { background: rgba(255,255,255,0.03); }
+
+    .status { margin-top: 16px; font-size: 14px; color: var(--muted); }
+
+    .result { margin-top: 18px; border: 1px solid var(--border); border-radius: 14px; padding: 18px; background: rgba(255,255,255,0.02); }
+    .row { display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
+    .badge { padding: 6px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; letter-spacing:.3px; }
+    .badge.good { background: rgba(34,197,94,.12); color: #60d394; border: 1px solid rgba(34,197,94,.25); }
+    .badge.bad  { background: rgba(239,68,68,.12); color: #ff8a8a; border: 1px solid rgba(239,68,68,.25); }
+    .metric { font-weight: 700; }
+
+    .bar { height: 8px; background: #1a2133; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+    .bar > span { display:block; height:100%; background: linear-gradient(90deg, var(--primary), #9daeff); width:0%; transition: width .35s ease; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top: 14px; }
+    .kv { border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .kv .k { color: var(--muted); font-size: 12px; }
+    .kv .v { font-weight: 600; margin-top: 4px; word-break: break-all; }
+
+    .json { margin-top: 16px; border: 1px dashed var(--border); border-radius: 12px; padding: 12px; color: #c9d2e3; background: rgba(255,255,255,0.02); max-height: 260px; overflow:auto; }
   </style>
   <script>
-    async function uploadFile(file) {
-      const resEl = document.getElementById('result');
-      resEl.textContent = 'Uploading and predicting...';
-      const fd = new FormData();
-      fd.append('file', file);
-      const resp = await fetch('/predict', { method: 'POST', body: fd });
-      const data = await resp.json();
-      resEl.textContent = JSON.stringify(data, null, 2);
+    function $(id){ return document.getElementById(id); }
+    function shortId(id){ if(!id) return '-'; const s = String(id); return s.length>12 ? s.slice(0,6)+'…'+s.slice(-4) : s; }
+
+    function setStatus(text){ $("status").textContent = text; }
+
+    function setLoading(loading){
+      $("choose").disabled = loading;
+      $("dz").classList.toggle('dragover', loading);
     }
-    function setup() {
-      const dz = document.getElementById('dz');
-      const input = document.getElementById('file');
-      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
-      dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
-      dz.addEventListener('drop', (e) => {
+
+    function renderResult(data){
+      const res = $("result");
+      const prob = data.probability ?? data.study_probability ?? 0;
+      const pct = Math.round(prob * 100);
+      const label = (data.label ?? data.prediction ?? (prob > 0.5 ? 'abnormal' : 'normal'));
+      const good = label === 'normal';
+      res.innerHTML = `
+        <div class="row">
+          <span class="badge ${good ? 'good':'bad'}">${label.toUpperCase()}</span>
+          <span class="metric">${pct}%</span>
+        </div>
+        <div class="bar"><span style="width:${pct}%;"></span></div>
+        <div class="grid">
+          <div class="kv"><div class="k">Slices used</div><div class="v">${data.num_slices ?? '-'}</div></div>
+          <div class="kv"><div class="k">Checkpoint</div><div class="v">${data.checkpoint ?? '-'}</div></div>
+        </div>
+      `;
+    }
+
+    async function uploadFile(file){
+      setStatus('Uploading and predicting...'); setLoading(true);
+      try{
+        const fd = new FormData(); fd.append('file', file);
+        const resp = await fetch('/predict', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if(!resp.ok){ throw new Error(data.error || 'Prediction failed'); }
+        renderResult(data);
+        setStatus('Done');
+        loadHistory();
+      }catch(e){
+        $("result").innerHTML = `<div class="kv"><div class="k">Error</div><div class="v">${e.message}</div></div>`;
+        setStatus('Error');
+      }finally{ setLoading(false); }
+    }
+
+    async function uploadMultiple(files){
+      setStatus('Batch uploading...'); setLoading(true);
+      try{
+        const fd = new FormData();
+        for(const f of files){ fd.append('files', f); }
+        const resp = await fetch('/batch', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if(!resp.ok){ throw new Error(data.error || 'Batch failed'); }
+        setStatus('Done');
+        $("result").innerHTML = `<div class=\"kv\"><div class=\"k\">Report</div><div class=\"v\"><button class=\"btn\" onclick=\"window.open('${data.report_url}','_blank')\">Download report</button></div></div>`;
+        loadHistory();
+      }catch(e){
+        $("result").innerHTML = `<div class=\"kv\"><div class=\"k\">Error</div><div class=\"v\">${e.message}</div></div>`;
+        setStatus('Error');
+      }finally{ setLoading(false); }
+    }
+
+    function setup(){
+      const dz = $("dz"), file = $("file"), btn = $("choose");
+      dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('dragover'); });
+      dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
+      dz.addEventListener('drop', e=>{
         e.preventDefault(); dz.classList.remove('dragover');
-        const f = e.dataTransfer.files[0]; if(f) uploadFile(f);
+        const files = e.dataTransfer.files;
+        if(files.length === 1){ uploadFile(files[0]); }
+        else if(files.length > 1){ uploadMultiple(files); }
       });
-      input.addEventListener('change', (e) => { const f = input.files[0]; if(f) uploadFile(f); });
+      btn.addEventListener('click', ()=> file.click());
+      file.addEventListener('change', ()=>{
+        const files = file.files;
+        if(files.length === 1){ uploadFile(files[0]); }
+        else if(files.length > 1){ uploadMultiple(files); }
+      });
+      fetch('/health').then(r=>r.json()).then(j=>{ $("ckpt").textContent = `Using checkpoint: ${j.checkpoint}`; }).catch(()=>{});
+      // load history initially and auto-refresh
+      loadHistory();
+      setInterval(loadHistory, 10000);
     }
+    
+    async function loadHistory(){
+      try{
+        const resp = await fetch('/history');
+        const data = await resp.json();
+        const list = (data && data.items) ? data.items : [];
+        const el = $("history");
+        if(!el) return;
+        if(!list.length){ el.innerHTML = '<div class="kv"><div class="k">No records</div><div class="v">Process some studies first</div></div>'; return; }
+        el.innerHTML = list.map(r=>{
+          const pct = Math.round((r.probability_of_pathology||0)*100);
+          const lab = r.pathology===1 ? 'abnormal' : 'normal';
+          return `
+            <div class="kv" style="display:flex; align-items:center; gap:10px;">
+              <input type="checkbox" class="sel" value="${r.id}">
+              <div style="flex:1;">
+                <div class="row">
+                  <span class="badge ${lab==='normal'?'good':'bad'}">${lab.toUpperCase()}</span>
+                  <span class="metric">${pct}%</span>
+                </div>
+                <div class="bar"><span style="width:${pct}%"></span></div>
+              </div>
+              <div class="kv" style="min-width:260px;">
+                <div class="k">Study UID</div>
+                <div class="v">${shortId(r.study_uid)||'-'}</div>
+              </div>
+            </div>`;
+        }).join('');
+      }catch(e){
+        const el = $("history"); if(el) el.innerHTML = `<div class=\"kv\"><div class=\"k\">Error</div><div class=\"v\">${e.message}</div></div>`;
+      }
+    }
+
+    async function exportSelected(){
+      const ids = Array.from(document.querySelectorAll('.sel:checked')).map(i=>parseInt(i.value));
+      if(!ids.length){ alert('Select at least one record'); return; }
+      try{
+        const resp = await fetch('/export_selected', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids})});
+        const data = await resp.json();
+        if(!resp.ok){ throw new Error(data.error||'Export failed'); }
+        // open report
+        window.open(data.report_url, '_blank');
+      }catch(e){ alert(e.message); }
+    }
+
     window.addEventListener('DOMContentLoaded', setup);
   </script>
 </head>
 <body>
-  <h1>CT Normal vs Abnormal</h1>
-  <p>Drop a ZIP with a DICOM study or choose a file to get a prediction.</p>
-  <div id="dz" class="dropzone">Drop ZIP here</div>
-  <p>or</p>
-  <input id="file" type="file" accept=".zip" />
-  <pre id="result"></pre>
-  <p id="ckpt" style="margin-top:1rem;color:#666;"></p>
-  <script>
-    fetch('/health').then(r=>r.json()).then(j=>{
-      const p = document.getElementById('ckpt');
-      p.textContent = `Using checkpoint: ${j.checkpoint}`;
-    }).catch(()=>{});
-  </script>
+  <div class="container">
+    <div class="card">
+      <h2 class="heading">CT Normal vs Abnormal</h2>
+      <p class="sub">Upload a ZIP with a DICOM study. We will run the model and return a study-level prediction.</p>
+
+      <div id="dz" class="dropzone">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div class="dz-title">Drop ZIP here</div>
+        <div class="dz-note">or choose a file below</div>
+      </div>
+
+      <div class="actions">
+        <button id="choose" class="btn">Choose ZIP(s)</button>
+        <input id="file" class="file" type="file" accept=".zip" multiple />
+        <button class="btn-ghost" onclick="window.open('/outputs/report.xlsx','_blank')">Download last report</button>
+        <button class="btn-ghost" onclick="location.href='/history_page'">Open History</button>
+        <button class="btn-ghost" onclick="location.href='/viewer'">2D Viewer</button>
+      </div>
+
+      <div id="status" class="status">Idle</div>
+
+      <div id="result" class="result"></div>
+
+      <p id="ckpt" class="sub" style="margin-top:16px;"></p>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h2 class="heading">History</h2>
+      <p class="sub">Previously processed studies. Select rows and export to Excel.</p>
+      <div class="actions" style="justify-content:flex-start;">
+        <button class="btn" onclick="exportSelected()">Export selected</button>
+      </div>
+      <div id="history" class="result" style="margin-top:12px;"></div>
+    </div>
+  </div>
 </body>
 </html>
 

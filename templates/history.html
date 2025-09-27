@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>History</title>
+  <style>
+    :root { --bg:#0b0f1a; --card:#111626; --muted:#9aa3b2; --text:#e6eaf2; --primary:#6d8bff; --border:#1e2538; --good:#22c55e; --bad:#ef4444; }
+    *{box-sizing:border-box}
+    body{ margin:0; min-height:100vh; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; padding: 24px; }
+    .container{ max-width: 1100px; margin: 0 auto; }
+    .card{ background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02)); border:1px solid var(--border); border-radius:16px; padding:20px; }
+    h2{ margin:0 0 10px; text-align:center }
+    .sub{ margin:0 0 14px; color: var(--muted); text-align:center }
+    .toolbar{ display:flex; gap:10px; justify-content:space-between; margin-bottom: 10px; flex-wrap:wrap }
+    .btn{ padding:8px 12px; border-radius:10px; border:1px solid var(--border); background: var(--primary); color:white; font-weight:600; cursor:pointer }
+    .btn-ghost{ background: transparent; color: var(--text) }
+    table{ width:100%; border-collapse: collapse; font-size: 14px; }
+    th, td{ border-bottom:1px solid var(--border); padding:10px 8px; text-align:left }
+    th{ color: var(--muted); font-weight:600; position: sticky; top: 0; background: rgba(11,15,26,0.9); backdrop-filter: blur(4px); }
+    .badge{ padding:4px 8px; border-radius:999px; font-weight:700; font-size:12px }
+    .good{ background: rgba(34,197,94,.12); color:#60d394; border:1px solid rgba(34,197,94,.25) }
+    .bad{ background: rgba(239,68,68,.12); color:#ff8a8a; border:1px solid rgba(239,68,68,.25) }
+    .right{ text-align:right }
+    .muted{ color: var(--muted) }
+    .wrap{ word-break: break-all }
+  </style>
+  <script>
+    function shortId(id){ if(!id) return '-'; const s = String(id); return s.length>12 ? s.slice(0,6)+'…'+s.slice(-4) : s; }
+    function pct(x){ if(x==null) return '-'; return Math.round(Number(x)*100)+'%'; }
+    async function fetchHistory(){
+      const r = await fetch('/history');
+      const j = await r.json();
+      return (j && j.items) ? j.items : [];
+    }
+    async function render(){
+      const items = await fetchHistory();
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = items.map((r)=>{
+        const lab = r.pathology===1 ? 'abnormal' : 'normal';
+        return `
+          <tr>
+            <td class="muted">${r.id}</td>
+            <td class="wrap">${shortId(r.study_uid)}</td>
+            <td class="wrap">${shortId(r.series_uid)}</td>
+            <td class="right">${pct(r.probability_of_pathology)}</td>
+            <td><span class="badge ${lab==='normal'?'good':'bad'}">${lab.toUpperCase()}</span></td>
+            <td class="wrap">${r.path_to_study||'-'}</td>
+            <td class="muted">${r.processing_status||'-'}</td>
+            <td class="muted">${r.created_at? new Date(r.created_at).toLocaleString(): '-'}</td>
+          </tr>`;
+      }).join('');
+    }
+    async function exportSelected(){
+      // For dedicated page we export all currently listed rows
+      const items = await fetchHistory();
+      const ids = items.map(i=>i.id);
+      if(!ids.length){ alert('No records to export'); return; }
+      const resp = await fetch('/export_selected', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids})});
+      const data = await resp.json();
+      if(!resp.ok){ alert(data.error||'Export failed'); return; }
+      window.open(data.report_url, '_blank');
+    }
+    window.addEventListener('DOMContentLoaded', ()=>{ render(); setInterval(render, 10000); });
+  </script>
+  </head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h2>History</h2>
+      <p class="sub">Processed studies. Auto-refreshing every 10s.</p>
+      <div class="toolbar">
+        <button class="btn-ghost" onclick="location.href='/'">Back</button>
+        <button class="btn" onclick="exportSelected()">Export all</button>
+      </div>
+      <div style="overflow:auto; max-height: 75vh;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Study UID (short)</th>
+              <th>Series UID (short)</th>
+              <th class="right">Probability</th>
+              <th>Label</th>
+              <th>Path</th>
+              <th>Status</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+
