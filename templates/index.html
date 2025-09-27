@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CT Inference</title>
+  <style>
+    body { font-family: -apple-system, system-ui, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+    .dropzone { border: 2px dashed #888; padding: 2rem; border-radius: 8px; text-align:center; color:#555; }
+    .dropzone.dragover { border-color: #4f46e5; color:#4f46e5; }
+    #result { margin-top: 1rem; white-space: pre-wrap; }
+    button { padding: .6rem 1rem; border-radius:6px; background:#4f46e5; color:#fff; border:none; cursor:pointer; }
+    button:disabled { opacity: .6; cursor: default; }
+  </style>
+  <script>
+    async function uploadFile(file) {
+      const resEl = document.getElementById('result');
+      resEl.textContent = 'Uploading and predicting...';
+      const fd = new FormData();
+      fd.append('file', file);
+      const resp = await fetch('/predict', { method: 'POST', body: fd });
+      const data = await resp.json();
+      resEl.textContent = JSON.stringify(data, null, 2);
+    }
+    function setup() {
+      const dz = document.getElementById('dz');
+      const input = document.getElementById('file');
+      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault(); dz.classList.remove('dragover');
+        const f = e.dataTransfer.files[0]; if(f) uploadFile(f);
+      });
+      input.addEventListener('change', (e) => { const f = input.files[0]; if(f) uploadFile(f); });
+    }
+    window.addEventListener('DOMContentLoaded', setup);
+  </script>
+</head>
+<body>
+  <h1>CT Normal vs Abnormal</h1>
+  <p>Drop a ZIP with a DICOM study or choose a file to get a prediction.</p>
+  <div id="dz" class="dropzone">Drop ZIP here</div>
+  <p>or</p>
+  <input id="file" type="file" accept=".zip" />
+  <pre id="result"></pre>
+  <p id="ckpt" style="margin-top:1rem;color:#666;"></p>
+  <script>
+    fetch('/health').then(r=>r.json()).then(j=>{
+      const p = document.getElementById('ckpt');
+      p.textContent = `Using checkpoint: ${j.checkpoint}`;
+    }).catch(()=>{});
+  </script>
+</body>
+</html>
+
+
