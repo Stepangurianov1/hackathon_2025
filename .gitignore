@@ -1,0 +1,23 @@
+# Dataset files
+Датасет/
+outputs/
+*.zip
+*.nii
+*.nii.gz
+*.dcm
+*.jpg
+*.png
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
